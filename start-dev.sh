@@ -76,6 +76,7 @@ cd ..
 
 # Install frontend dependencies
 echo "📦 Installing frontend dependencies..."
+cd frontend
 if [ ! -d "node_modules" ]; then
     npm install
     if [ $? -ne 0 ]; then
