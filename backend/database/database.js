@@ -184,7 +184,7 @@ class Database {
       const { id, noteId, originalName, fileName, filePath, mimeType, size } = fileData;
       
       const query = `
-        INSERT INTO files 
+        INSERT OR IGNORE INTO files 
         (id, noteId, originalName, fileName, filePath, mimeType, size)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `;

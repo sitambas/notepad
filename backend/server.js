@@ -652,6 +652,71 @@ app.get('/api/files/:noteId', async (req, res) => {
   }
 });
 
+// Link files from one note to another (without copying files)
+app.post('/api/link-files', async (req, res) => {
+  try {
+    const { fromNoteId, toNoteId } = req.body;
+    
+    if (!fromNoteId || !toNoteId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both fromNoteId and toNoteId are required'
+      });
+    }
+
+    // Get files from source note
+    const sourceFiles = await db.getFiles(fromNoteId);
+    
+    if (!sourceFiles || sourceFiles.length === 0) {
+      return res.json({
+        success: true,
+        files: [],
+        message: 'No files to link'
+      });
+    }
+
+    const linkedFiles = [];
+    
+    // Link each file to the new note (create new file records that reference the same files)
+    for (const file of sourceFiles) {
+      try {
+        // Create a new file record that references the same physical file
+        const newFileRecord = {
+          id: uuidv4(), // Generate unique ID
+          noteId: toNoteId, // Link to the new note
+          originalName: file.originalName,
+          fileName: file.fileName, // Same physical file
+          filePath: file.filePath, // Same file path
+          mimeType: file.mimeType,
+          size: file.size,
+          createdAt: new Date().toISOString()
+        };
+        
+        // Save the new file metadata to database (INSERT OR IGNORE handles duplicates)
+        await db.saveFile(newFileRecord);
+        linkedFiles.push(newFileRecord);
+        
+      } catch (fileError) {
+        console.error(`Error linking file ${file.originalName}:`, fileError);
+        // Continue with other files even if one fails
+      }
+    }
+
+    res.json({
+      success: true,
+      files: linkedFiles,
+      message: `${linkedFiles.length} file(s) linked successfully`
+    });
+
+  } catch (error) {
+    console.error('Link files error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to link files'
+    });
+  }
+});
+
 // Download file
 app.get('/api/file/:fileId', async (req, res) => {
   try {

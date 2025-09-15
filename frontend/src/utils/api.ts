@@ -31,6 +31,7 @@ export interface ApiResponse {
   url?: string;
   monospace?: string;
   caret?: number;
+  files?: FileData[];
 }
 
 export interface User {
@@ -308,6 +309,31 @@ class NotepadAPI {
       return {
         success: false,
         error: 'Failed to logout'
+      };
+    }
+  }
+
+  // Link files from one note to another (without copying files)
+  async linkFiles(fromNoteId: string, toNoteId: string): Promise<{ success: boolean; files?: FileData[]; error?: string; message?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/link-files`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fromNoteId,
+          toNoteId
+        }),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error linking files:', error);
+      return {
+        success: false,
+        error: 'Failed to link files'
       };
     }
   }
