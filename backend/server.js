@@ -7,11 +7,15 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
 const Database = require('./database/database');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Security middleware
 app.use(helmet({
@@ -37,6 +41,18 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// Session middleware
+app.use(session({
+  secret: JWT_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 // Initialize database
 const db = new Database();
@@ -143,6 +159,295 @@ app.post('/api/save', validateNote, async (req, res) => {
       error: 'Failed to save note' 
     });
   }
+});
+
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Authentication routes
+// Register endpoint
+app.post('/api/auth/register', [
+  body('email').isEmail().normalizeEmail(),
+  body('username').isLength({ min: 3, max: 20 }).matches(/^[a-zA-Z0-9_]+$/),
+  body('password').isLength({ min: 6 }),
+  body('firstName').optional().isLength({ min: 1, max: 50 }),
+  body('lastName').optional().isLength({ min: 1, max: 50 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
+    }
+
+    const { email, username, password, firstName, lastName } = req.body;
+
+    // Check if user already exists
+    const existingUserByEmail = await db.getUserByEmail(email);
+    if (existingUserByEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User with this email already exists' 
+      });
+    }
+
+    const existingUserByUsername = await db.getUserByUsername(username);
+    if (existingUserByUsername) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Username already taken' 
+      });
+    }
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Create user
+    const userId = uuidv4();
+    const userData = {
+      id: userId,
+      email,
+      username,
+      password: hashedPassword,
+      firstName: firstName || '',
+      lastName: lastName || '',
+      avatar: null
+    };
+
+    await db.createUser(userData);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: userId, 
+        email, 
+        username 
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully',
+      token,
+      user: {
+        id: userId,
+        email,
+        username,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        avatar: null
+      }
+    });
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+// Login endpoint
+app.post('/api/auth/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
+    }
+
+    const { email, password } = req.body;
+
+    // Find user by email
+    const user = await db.getUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid email or password' 
+      });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid email or password' 
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        username: user.username 
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatar: user.avatar
+      }
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+// Get current user profile
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatar: user.avatar,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+// Update user profile
+app.put('/api/auth/profile', authenticateToken, [
+  body('email').optional().isEmail().normalizeEmail(),
+  body('username').optional().isLength({ min: 3, max: 20 }).matches(/^[a-zA-Z0-9_]+$/),
+  body('firstName').optional().isLength({ min: 1, max: 50 }),
+  body('lastName').optional().isLength({ min: 1, max: 50 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
+    }
+
+    const { email, username, firstName, lastName, avatar } = req.body;
+    const userId = req.user.id;
+
+    // Check if email/username is already taken by another user
+    if (email) {
+      const existingUser = await db.getUserByEmail(email);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Email already in use' 
+        });
+      }
+    }
+
+    if (username) {
+      const existingUser = await db.getUserByUsername(username);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Username already taken' 
+        });
+      }
+    }
+
+    // Update user
+    const updateData = { email, username, firstName, lastName, avatar };
+    await db.updateUser(userId, updateData);
+
+    // Get updated user
+    const updatedUser = await db.getUserById(userId);
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        avatar: updatedUser.avatar
+      }
+    });
+
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  // Since we're using JWT, logout is handled client-side by removing the token
+  res.json({
+    success: true,
+    message: 'Logged out successfully'
+  });
 });
 
 // Load note endpoint

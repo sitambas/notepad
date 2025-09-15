@@ -8,7 +8,8 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001
+        PORT: 3001,
+        JWT_SECRET: 'your-jwt-secret-key-change-in-production'
       },
       error_file: './logs/backend-error.log',
       out_file: './logs/backend-out.log',
@@ -16,7 +17,10 @@ module.exports = {
       time: true,
       watch: false,
       max_memory_restart: '1G',
-      node_args: '--max-old-space-size=1024'
+      node_args: '--max-old-space-size=1024',
+      restart_delay: 4000,
+      max_restarts: 10,
+      min_uptime: '10s'
     },
     {
       name: 'notepad-frontend',
@@ -34,7 +38,10 @@ module.exports = {
       log_file: './logs/frontend-combined.log',
       time: true,
       watch: false,
-      max_memory_restart: '512M'
+      max_memory_restart: '512M',
+      restart_delay: 4000,
+      max_restarts: 10,
+      min_uptime: '10s'
     }
   ]
 };

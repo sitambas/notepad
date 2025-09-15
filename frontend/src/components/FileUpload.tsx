@@ -145,7 +145,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
             </p>
             <Button
               variant="outline"
-              onClick={() => document.getElementById("file-input")?.click()}
+              onClick={() => {
+                const fileInput = document.getElementById("file-input");
+                if (fileInput) fileInput.click();
+              }}
             >
               Choose Files
             </Button>

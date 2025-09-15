@@ -1,15 +1,18 @@
 import { useState, useCallback, useEffect } from "react";
-import { FileText, Save, Lock, Share2, Download, Settings, Mic, Volume2, Plus, Edit, User, Lightbulb, Wrench, SpellCheck, Type, Upload, Image, FileSpreadsheet, Presentation, File, Trash2 } from "lucide-react";
+import { FileText, Save, Lock, Share2, Download, Settings, Mic, Volume2, Plus, Edit, User, Lightbulb, Wrench, SpellCheck, Type, Upload, Image, FileSpreadsheet, Presentation, File, Trash2, LogIn } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SimpleEncryption, NoteStorage } from "@/utils/encryption";
 import { notepadAPI, type NoteData } from "@/utils/api";
+import { useAuth } from "@/contexts/AuthContext";
 import PasswordModal from "./PasswordModal";
 import ShareModal from "./ShareModal";
 import TextToSpeech from "./TextToSpeech";
 import SpeechToText from "./SpeechToText";
 import FileUpload from "./FileUpload";
+import Login from "./auth/Login";
+import Register from "./auth/Register";
 import { toast } from "sonner";
 
 interface NotepadProps {
@@ -17,6 +20,7 @@ interface NotepadProps {
 }
 
 const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
+  const { user } = useAuth();
   const [text, setText] = useState("");
   const [isMonospace, setIsMonospace] = useState(false);
   const [spellCheck, setSpellCheck] = useState(true);
@@ -27,6 +31,8 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isFileUploadModalOpen, setIsFileUploadModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
 
@@ -483,12 +489,13 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
+                    onClick={() => setIsLoginModalOpen(true)}
                   >
                     <User className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>User Profile</p>
+                  <p>{user ? 'User Profile' : 'Sign In'}</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -731,6 +738,25 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
         onFilesUploaded={handleFilesUploaded}
         uploadedFiles={uploadedFiles}
         onFileRemove={handleFileRemove}
+      />
+
+      {/* Authentication Modals */}
+      <Login
+        isOpen={isLoginModalOpen}
+        onOpenChange={setIsLoginModalOpen}
+        onSwitchToRegister={() => {
+          setIsLoginModalOpen(false);
+          setIsRegisterModalOpen(true);
+        }}
+      />
+
+      <Register
+        isOpen={isRegisterModalOpen}
+        onOpenChange={setIsRegisterModalOpen}
+        onSwitchToLogin={() => {
+          setIsRegisterModalOpen(false);
+          setIsLoginModalOpen(true);
+        }}
       />
     </div>
   );

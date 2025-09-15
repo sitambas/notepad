@@ -33,6 +33,25 @@ export interface ApiResponse {
   caret?: number;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  avatar?: string;
+  createdAt?: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  message?: string;
+  token?: string;
+  user?: User;
+  error?: string;
+  details?: any[];
+}
+
 class NotepadAPI {
   private async request<T>(
     endpoint: string, 
@@ -171,6 +190,124 @@ class NotepadAPI {
       return {
         success: false,
         error: 'Failed to delete file'
+      };
+    }
+  }
+
+  // Authentication methods
+  async register(userData: {
+    email: string;
+    username: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error registering user:', error);
+      return {
+        success: false,
+        error: 'Failed to register user'
+      };
+    }
+  }
+
+  async login(email: string, password: string): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error logging in:', error);
+      return {
+        success: false,
+        error: 'Failed to login'
+      };
+    }
+  }
+
+  async getCurrentUser(token: string): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      return {
+        success: false,
+        error: 'Failed to get user profile'
+      };
+    }
+  }
+
+  async updateProfile(token: string, userData: {
+    email?: string;
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+  }): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      return {
+        success: false,
+        error: 'Failed to update profile'
+      };
+    }
+  }
+
+  async logout(): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error logging out:', error);
+      return {
+        success: false,
+        error: 'Failed to logout'
       };
     }
   }

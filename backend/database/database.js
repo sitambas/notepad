@@ -36,6 +36,21 @@ class Database {
       )
     `;
 
+    const createUsersTableQuery = `
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        firstName TEXT,
+        lastName TEXT,
+        avatar TEXT,
+        isActive BOOLEAN DEFAULT 1,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     this.db.run(createNotesTableQuery, (err) => {
       if (err) {
         console.error('Error creating notes table:', err);
@@ -45,6 +60,12 @@ class Database {
     this.db.run(createFilesTableQuery, (err) => {
       if (err) {
         console.error('Error creating files table:', err);
+      }
+    });
+
+    this.db.run(createUsersTableQuery, (err) => {
+      if (err) {
+        console.error('Error creating users table:', err);
       } else {
         console.log('✅ Database initialized successfully');
       }
@@ -227,6 +248,114 @@ class Database {
       const query = 'DELETE FROM files WHERE noteId = ?';
       
       this.db.run(query, [noteId], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
+        }
+      });
+    });
+  }
+
+  // User authentication methods
+  createUser(userData) {
+    return new Promise((resolve, reject) => {
+      const { id, email, username, password, firstName, lastName, avatar } = userData;
+      const query = `
+        INSERT INTO users (id, email, username, password, firstName, lastName, avatar)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      
+      this.db.run(query, [id, email, username, password, firstName, lastName, avatar], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id, changes: this.changes });
+        }
+      });
+    });
+  }
+
+  getUserByEmail(email) {
+    return new Promise((resolve, reject) => {
+      const query = 'SELECT * FROM users WHERE email = ? AND isActive = 1';
+      
+      this.db.get(query, [email], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  getUserByUsername(username) {
+    return new Promise((resolve, reject) => {
+      const query = 'SELECT * FROM users WHERE username = ? AND isActive = 1';
+      
+      this.db.get(query, [username], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  getUserById(id) {
+    return new Promise((resolve, reject) => {
+      const query = 'SELECT * FROM users WHERE id = ? AND isActive = 1';
+      
+      this.db.get(query, [id], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
+  updateUser(id, userData) {
+    return new Promise((resolve, reject) => {
+      const { email, username, firstName, lastName, avatar } = userData;
+      const query = `
+        UPDATE users 
+        SET email = ?, username = ?, firstName = ?, lastName = ?, avatar = ?, updatedAt = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `;
+      
+      this.db.run(query, [email, username, firstName, lastName, avatar, id], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
+        }
+      });
+    });
+  }
+
+  updateUserPassword(id, hashedPassword) {
+    return new Promise((resolve, reject) => {
+      const query = 'UPDATE users SET password = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?';
+      
+      this.db.run(query, [hashedPassword, id], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ changes: this.changes });
+        }
+      });
+    });
+  }
+
+  deleteUser(id) {
+    return new Promise((resolve, reject) => {
+      const query = 'UPDATE users SET isActive = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = ?';
+      
+      this.db.run(query, [id], function(err) {
         if (err) {
           reject(err);
         } else {
