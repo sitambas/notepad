@@ -32,7 +32,7 @@ app.use('/api/', limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3010', 'http://localhost:8080', 'https://notepad.pw'],
+  origin: ['http://localhost:3011', 'http://localhost:8080', 'https://notepad.pw'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -465,6 +465,9 @@ app.get('/api/load/:id', async (req, res) => {
       });
     }
 
+    // Get files for this note (always load files, even for locked notes)
+    const files = await db.getFiles(id);
+
     // If note is encrypted, verify password
     if (note.isEncrypted) {
       if (!pw) {
@@ -475,7 +478,8 @@ app.get('/api/load/:id', async (req, res) => {
           pw: '1', // Indicates password required
           url: note.url || '',
           monospace: note.monospace ? '1' : '0',
-          caret: note.caret || 0
+          caret: note.caret || 0,
+          files: files // Include files even when locked
         });
       }
 
@@ -487,9 +491,6 @@ app.get('/api/load/:id', async (req, res) => {
         });
       }
     }
-
-    // Get files for this note
-    const files = await db.getFiles(id);
 
     res.json({
       success: true,

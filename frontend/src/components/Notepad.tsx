@@ -3,6 +3,7 @@ import { FileText, Save, Lock, Share2, Download, Settings, Mic, Volume2, Plus, E
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SimpleEncryption, NoteStorage } from "@/utils/encryption";
 import { notepadAPI, type NoteData } from "@/utils/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +14,7 @@ import SpeechToText from "./SpeechToText";
 import FileUpload from "./FileUpload";
 import Login from "./auth/Login";
 import Register from "./auth/Register";
+import PasswordChangeModal from "./PasswordChangeModal";
 import { toast } from "sonner";
 
 interface NotepadProps {
@@ -29,6 +31,8 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
   const [password, setPassword] = useState("");
   const [noteId, setNoteId] = useState("");
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isPasswordOptionsModalOpen, setIsPasswordOptionsModalOpen] = useState(false);
+  const [isPasswordChangeModalOpen, setIsPasswordChangeModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isFileUploadModalOpen, setIsFileUploadModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -58,8 +62,7 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
             } else {
               console.log('No files found in backend response');
               setUploadedFiles([]);
-            }
-            
+            }            
             if (response.pw === '1') {
               // Note is encrypted, show password modal
               setIsPasswordModalOpen(true);
@@ -233,6 +236,52 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
     }
   };
 
+  const handlePasswordChange = async (currentPassword: string, newPassword: string) => {
+    try {
+      // First verify current password by trying to load the note
+      const verifyResponse = await notepadAPI.loadNote(noteId, currentPassword);
+      
+      if (!verifyResponse.success) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // If verification successful, save with new password
+      const noteData: Partial<NoteData> = {
+        key: noteId,
+        pad: text,
+        url: propNoteId || noteId,
+        monospace: isMonospace ? '1' : '0',
+        caret: 0,
+        pw: newPassword
+      };
+
+      const response = await notepadAPI.saveNote(noteData);
+      
+      if (response.success) {
+        // Also save to localStorage as backup
+        NoteStorage.saveNote(noteId, text, true, newPassword);
+        setPassword(newPassword);
+        setIsPasswordProtected(true);
+        toast.success('Password changed successfully');
+      } else {
+        throw new Error(response.error || 'Failed to change password');
+      }
+    } catch (error) {
+      console.error('Failed to change password:', error);
+      toast.error('Failed to change password. Please check your current password.');
+    }
+  };
+
+  const handleLockButtonClick = () => {
+    if (isPasswordProtected) {
+      // Note is already protected, show options modal
+      setIsPasswordOptionsModalOpen(true);
+    } else {
+      // Note is not protected, show password set modal
+      setIsPasswordModalOpen(true);
+    }
+  };
+
   const handleDecrypt = async (decryptPassword: string) => {
     try {
       setIsDecrypting(true);
@@ -245,6 +294,16 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
         setPassword(decryptPassword);
         setIsPasswordProtected(true);
         setIsPasswordModalOpen(false);
+        
+        // Load files from the decrypted response
+        if (response.files && response.files.length > 0) {
+          console.log('Loading files after decryption:', response.files);
+          setUploadedFiles(response.files);
+        } else {
+          console.log('No files found after decryption');
+          setUploadedFiles([]);
+        }
+        
         toast.success('Note decrypted successfully');
       } else {
         throw new Error(response.error || 'Invalid password');
@@ -457,14 +516,14 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setIsPasswordModalOpen(true)}
+                    onClick={handleLockButtonClick}
                     className="h-8 w-8 p-0"
                   >
                     <Lock className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isPasswordProtected ? "Password Protected" : "Set Password"}</p>
+                  <p>{isPasswordProtected ? "Manage Password" : "Set Password"}</p>
                 </TooltipContent>
               </Tooltip>
               
@@ -758,6 +817,63 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
           setIsLoginModalOpen(true);
         }}
       />
+
+      {/* Password Options Modal */}
+      <Dialog open={isPasswordOptionsModalOpen} onOpenChange={setIsPasswordOptionsModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Password Protection Options</DialogTitle>
+            <DialogDescription>
+              This note is currently password protected. What would you like to do?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <Button
+              onClick={() => {
+                setIsPasswordOptionsModalOpen(false);
+                setIsPasswordChangeModalOpen(true);
+              }}
+              variant="outline"
+              className="w-full"
+            >
+              Change Password
+            </Button>
+            <Button
+              onClick={() => {
+                setIsPasswordOptionsModalOpen(false);
+                handlePasswordRemove();
+              }}
+              variant="destructive"
+              className="w-full"
+            >
+              Remove Password Protection
+            </Button>
+            <Button
+              onClick={() => setIsPasswordOptionsModalOpen(false)}
+              variant="ghost"
+              className="w-full"
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Change Modal */}
+      <Dialog open={isPasswordChangeModalOpen} onOpenChange={setIsPasswordChangeModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new password.
+            </DialogDescription>
+          </DialogHeader>
+          <PasswordChangeModal
+            onConfirm={handlePasswordChange}
+            onCancel={() => setIsPasswordChangeModalOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
