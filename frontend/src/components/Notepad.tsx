@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { FileText, Save, Lock, Share2, Download, Settings, Mic, Volume2, Plus, Edit, User, Lightbulb, Wrench, SpellCheck, Type, Upload, Image, FileSpreadsheet, Presentation, File, Trash2, LogIn } from "lucide-react";
+import { FileText, Save, Lock, Share2, Download, Settings, Mic, Volume2, Plus, Edit, User, Lightbulb, Wrench, SpellCheck, Type, Upload, Image, FileSpreadsheet, Presentation, File, Trash2, LogIn, Sun, Moon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SimpleEncryption, NoteStorage } from "@/utils/encryption";
 import { notepadAPI, type NoteData } from "@/utils/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import PasswordModal from "./PasswordModal";
 import ShareModal from "./ShareModal";
 import TextToSpeech from "./TextToSpeech";
@@ -15,6 +16,7 @@ import FileUpload from "./FileUpload";
 import Login from "./auth/Login";
 import Register from "./auth/Register";
 import PasswordChangeModal from "./PasswordChangeModal";
+import ChangeUrlModal from "./ChangeUrlModal";
 import { toast } from "sonner";
 
 interface NotepadProps {
@@ -23,6 +25,7 @@ interface NotepadProps {
 
 const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [text, setText] = useState("");
   const [isMonospace, setIsMonospace] = useState(false);
   const [spellCheck, setSpellCheck] = useState(true);
@@ -37,6 +40,7 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
   const [isFileUploadModalOpen, setIsFileUploadModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isChangeUrlModalOpen, setIsChangeUrlModalOpen] = useState(false);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
 
@@ -393,6 +397,37 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
     }
   };
 
+  const handleChangeUrl = async (newUrl: string) => {
+    try {
+      // Use the new changeUrl API method
+      const response = await notepadAPI.changeUrl(noteId, newUrl, isPasswordProtected ? password : undefined);
+      
+      if (response.success) {
+        // Update the note ID and URL
+        setNoteId(newUrl);
+        const newFullUrl = `${window.location.origin}/${newUrl}`;
+        window.history.pushState({}, '', newFullUrl);
+        
+        // Also save to localStorage as backup
+        if (isPasswordProtected && password) {
+          const encryptedText = await SimpleEncryption.encrypt(text, password);
+          NoteStorage.saveNote(newUrl, encryptedText, true, password);
+        } else {
+          NoteStorage.saveNote(newUrl, text, false);
+        }
+        NoteStorage.saveCurrentNote(text);
+        
+        setIsChangeUrlModalOpen(false);
+        toast.success('URL changed successfully');
+      } else {
+        throw new Error(response.error || 'Failed to change URL');
+      }
+    } catch (error) {
+      console.error('Failed to change URL:', error);
+      toast.error('Failed to change URL. Please try again.');
+    }
+  };
+
 
   const handleSpeechTranscript = (transcript: string) => {
     setText(prev => prev + (prev ? ' ' : '') + transcript);
@@ -532,6 +567,7 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setIsChangeUrlModalOpen(true)}
                     className="h-8 w-8 p-0"
                   >
                     <Edit className="w-4 h-4" />
@@ -611,12 +647,17 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
+                    onClick={toggleTheme}
                   >
-                    <Lightbulb className="w-4 h-4" />
+                    {theme === 'dark' ? (
+                      <Sun className="w-4 h-4" />
+                    ) : (
+                      <Moon className="w-4 h-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Toggle Theme</p>
+                  <p>{theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}</p>
                 </TooltipContent>
               </Tooltip>
               
@@ -871,6 +912,23 @@ const Notepad = ({ noteId: propNoteId }: NotepadProps) => {
           <PasswordChangeModal
             onConfirm={handlePasswordChange}
             onCancel={() => setIsPasswordChangeModalOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Change URL Modal */}
+      <Dialog open={isChangeUrlModalOpen} onOpenChange={setIsChangeUrlModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Change URL</DialogTitle>
+            <DialogDescription>
+              Change the URL of your note. This will create a new URL for your note.
+            </DialogDescription>
+          </DialogHeader>
+          <ChangeUrlModal
+            currentUrl={noteId}
+            onConfirm={handleChangeUrl}
+            onCancel={() => setIsChangeUrlModalOpen(false)}
           />
         </DialogContent>
       </Dialog>

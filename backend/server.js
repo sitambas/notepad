@@ -32,11 +32,31 @@ app.use('/api/', limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3011', 'http://localhost:8080', 'https://notepad.pw'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = ['http://localhost:3010', 'http://localhost:8080', 'https://notepad.pw'];
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
+
+// Handle preflight requests
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Body parsing middleware
 app.use(express.urlencoded({ extended: true }));
@@ -550,6 +570,95 @@ app.delete('/api/delete/:id', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to delete note' 
+    });
+  }
+});
+
+// Change URL endpoint
+app.put('/api/change-url/:id', [
+  body('newUrl').isLength({ min: 3, max: 50 }).matches(/^[a-zA-Z0-9_-]+$/).withMessage('URL must be 3-50 characters and contain only letters, numbers, hyphens, and underscores'),
+  body('pw').optional().isString()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
+    }
+
+    const { id } = req.params;
+    const { newUrl, pw } = req.body;
+
+    // Check if new URL is the same as current
+    if (id === newUrl) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'New URL must be different from current URL' 
+      });
+    }
+
+    // Check if note exists
+    const note = await db.getNote(id);
+    if (!note) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Note not found' 
+      });
+    }
+
+    // If note is encrypted, verify password
+    if (note.isEncrypted && pw) {
+      const isValidPassword = await verifyPassword(pw, note.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ 
+          success: false, 
+          error: 'Invalid password' 
+        });
+      }
+    }
+
+    // Check if new URL is already taken
+    const existingNote = await db.getNote(newUrl);
+    if (existingNote) {
+      return res.status(409).json({ 
+        success: false, 
+        error: 'This URL is already taken. Please choose a different one.' 
+      });
+    }
+
+    // Update the note with new URL
+    const updateData = {
+      id: newUrl,
+      content: note.content,
+      password: note.password,
+      isEncrypted: note.isEncrypted,
+      monospace: note.monospace,
+      caret: note.caret,
+      url: newUrl,
+      createdAt: note.createdAt,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Save the note with new URL
+    await db.saveNote(updateData);
+
+    // Delete the old note
+    await db.deleteNote(id);
+
+    res.json({
+      success: true,
+      message: 'URL changed successfully',
+      newUrl: newUrl
+    });
+
+  } catch (error) {
+    console.error('Change URL error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to change URL' 
     });
   }
 });

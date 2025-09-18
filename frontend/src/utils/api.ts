@@ -112,6 +112,19 @@ class NotepadAPI {
     });
   }
 
+  async changeUrl(id: string, newUrl: string, password?: string): Promise<ApiResponse> {
+    const formData = new URLSearchParams();
+    formData.append('newUrl', newUrl);
+    if (password) {
+      formData.append('pw', password);
+    }
+
+    return this.request<ApiResponse>(`/change-url/${id}`, {
+      method: 'PUT',
+      body: formData.toString(),
+    });
+  }
+
   async healthCheck(): Promise<ApiResponse> {
     return this.request<ApiResponse>('/health', {
       method: 'GET',
